@@ -184,7 +184,10 @@ impl<'a> EventSourceProjection<'a> {
     fn handle_error(&mut self, error: &Error) {
         self.clear_fetch();
         if let Some(retry_delay) = self.retry_policy.retry(error, *self.last_retry) {
-            let retry_num = self.last_retry.map(|retry| retry.0.saturating_add(1)).unwrap_or(1);
+            let retry_num = self
+                .last_retry
+                .map(|retry| retry.0.saturating_add(1))
+                .unwrap_or(1);
             *self.last_retry = Some((retry_num, retry_delay));
             self.delay.replace(Delay::new(retry_delay));
         } else {
@@ -200,6 +203,8 @@ pub enum Event {
     Open,
     /// The event fired when a [`MessageEvent`] is received
     Message(MessageEvent),
+    /// The event fired when the connection is closed
+    Close,
 }
 
 impl From<MessageEvent> for Event {
@@ -274,11 +279,7 @@ impl Stream for EventSource {
                 this.handle_event(&event);
                 Poll::Ready(Some(Ok(event.into())))
             }
-            Poll::Ready(None) => {
-                let err = Error::StreamEnded;
-                this.handle_error(&err);
-                Poll::Ready(Some(Err(err)))
-            }
+            Poll::Ready(None) => Poll::Ready(Some(Ok(Event::Close))),
             Poll::Pending => Poll::Pending,
         }
     }
